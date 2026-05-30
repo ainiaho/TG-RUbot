@@ -292,120 +292,116 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
           message_id: sendMessageResp.result.message_id,
           reaction: [{ type: "emoji", emoji: "🕊" }]
         });
-      } else {
-        // for parse_mode test
-        await postToTelegramApi(botToken, 'sendMessage', {
-          chat_id: fromChat.id,
-          message_thread_id: message.message_thread_id,
-          text: `resp: ${JSON.stringify(sendMessageResp)}`,
-        })
       }
-    } else {
-      // Handle other messages including replies
-      const reply = message.reply_to_message;
-      const check = await doCheckInit(botToken, ownerUid)
-      if (!check.failed) {
-        const metaDataMessage = check.checkMetaDataMessageResp.result.pinned_message;
-        const {
-          superGroupChatId,
-          topicToFromChat,
-          fromChatToTopic,
-          bannedTopics,
-          topicToCommentName,
-          fromChatToCommentName
-        } = parseMetaDataMessage(metaDataMessage);
-        if (message.forum_topic_created || message.pinned_message) {
-          // ignore message types
-          return new Response('OK');
-        } else if (fromUser.id.toString() === ownerUid && fromChat.id === superGroupChatId
-            && fromChat.is_forum && message.is_topic_message) {
-          // send message in super group
-          if (message.forum_topic_edited?.name) {
-            // comment name for topic
-            await processTopicCommentNameEdit(
-                botToken,
-                ownerUid,
-                message.message_thread_id,
-                topicToFromChat.get(message.message_thread_id),
-                message.forum_topic_edited?.name,
-                metaDataMessage);
-          } else if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id && reply?.message_id !== message.message_thread_id) {
-            // delete message
-            await processPMDeleteSent(botToken, message, reply, superGroupChatId, topicToFromChat);
-          } else {
-            // topic PM send to others
-            await processPMSent(botToken, message, topicToFromChat);
-          }
-        } else {
-          // send message to bot via chat
-          if (message.forum_topic_edited?.name) {
-          } else if (message.text === "#fixpin" && reply?.message_id && fromUser.id.toString() === ownerUid) {
-            // fix pined message
-            await fixPinMessage(botToken, message.chat.id, reply.text, reply.message_id);
-          } else if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id) {
-            // delete message
-            if (!bannedTopics.includes(fromChatToTopic.get(fromChat.id))) {
-              await processPMDeleteReceived(botToken, ownerUid, message, reply, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage);
-            }
-          } else {
-            // topic PM receive from others. Always receive first.
-            await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage, fromChatToCommentName);
-          }
-        }
-        return new Response('OK');
-      }
+      return new Response('OK');
+    }
 
-      if (reply && fromChat.id.toString() === ownerUid) {
-        if (message.text === "#fixpin" && reply?.message_id && fromUser.id.toString() === ownerUid) {
+    // Handle other messages including replies
+    const reply = message.reply_to_message;
+    const check = await doCheckInit(botToken, ownerUid)
+    if (!check.failed) {
+      const metaDataMessage = check.checkMetaDataMessageResp.result.pinned_message;
+      const {
+        superGroupChatId,
+        topicToFromChat,
+        fromChatToTopic,
+        bannedTopics,
+        topicToCommentName,
+        fromChatToCommentName
+      } = parseMetaDataMessage(metaDataMessage);
+      if (message.forum_topic_created || message.pinned_message) {
+        // ignore message types
+        return new Response('OK');
+      } else if (fromUser.id.toString() === ownerUid && fromChat.id === superGroupChatId
+          && fromChat.is_forum && message.is_topic_message) {
+        // send message in super group
+        if (message.forum_topic_edited?.name) {
+          // comment name for topic
+          await processTopicCommentNameEdit(
+              botToken,
+              ownerUid,
+              message.message_thread_id,
+              topicToFromChat.get(message.message_thread_id),
+              message.forum_topic_edited?.name,
+              metaDataMessage);
+        } else if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id && reply?.message_id !== message.message_thread_id) {
+          // delete message
+          await processPMDeleteSent(botToken, message, reply, superGroupChatId, topicToFromChat);
+        } else {
+          // topic PM send to others
+          await processPMSent(botToken, message, topicToFromChat);
+        }
+      } else {
+        // send message to bot via chat
+        if (message.forum_topic_edited?.name) {
+        } else if (message.text === "#fixpin" && reply?.message_id && fromUser.id.toString() === ownerUid) {
           // fix pined message
           await fixPinMessage(botToken, message.chat.id, reply.text, reply.message_id);
-          return new Response('OK');
-        }
-
-        const rm = reply.reply_markup;
-        if (rm && rm.inline_keyboard && rm.inline_keyboard.length > 0) {
-          let senderUid = rm.inline_keyboard[0][0].callback_data;
-          if (!senderUid) {
-            senderUid = rm.inline_keyboard[0][0].url.split('tg://user?id=')[1];
+        } else if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id) {
+          // delete message
+          if (!bannedTopics.includes(fromChatToTopic.get(fromChat.id))) {
+            await processPMDeleteReceived(botToken, ownerUid, message, reply, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage);
           }
-
-          await postToTelegramApi(botToken, 'copyMessage', {
-            chat_id: parseInt(senderUid),
-            from_chat_id: fromChat.id,
-            message_id: message.message_id
-          });
+        } else {
+          // topic PM receive from others. Always receive first.
+          await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage, fromChatToCommentName);
         }
+      }
+      return new Response('OK');
+    }
 
+    // Reply handling when initialization check fails
+    if (reply && fromChat.id.toString() === ownerUid) {
+      if (message.text === "#fixpin" && reply?.message_id && fromUser.id.toString() === ownerUid) {
+        // fix pined message
+        await fixPinMessage(botToken, message.chat.id, reply.text, reply.message_id);
         return new Response('OK');
       }
 
-      const sender = fromChat;
-      const senderUid = sender.id.toString();
-      const senderName = sender.username ? `@${sender.username}` : [sender.first_name, sender.last_name].filter(Boolean).join(' ');
-
-      const copyMessage = async function (withUrl = false) {
-        const ik = [[{
-          text: `🔏 From: ${senderName} (${senderUid})`,
-          callback_data: senderUid,
-        }]];
-
-        if (withUrl) {
-          ik[0][0].text = `🔓 From: ${senderName} (${senderUid})`
-          ik[0][0].url = `tg://user?id=${senderUid}`;
+      const rm = reply.reply_markup;
+      if (rm && rm.inline_keyboard && rm.inline_keyboard.length > 0) {
+        let senderUid = rm.inline_keyboard[0][0].callback_data;
+        if (!senderUid) {
+          senderUid = rm.inline_keyboard[0][0].url.split('tg://user?id=')[1];
         }
 
-        return await postToTelegramApi(botToken, 'copyMessage', {
-          chat_id: parseInt(ownerUid),
+        await postToTelegramApi(botToken, 'copyMessage', {
+          chat_id: parseInt(senderUid),
           from_chat_id: fromChat.id,
-          message_id: message.message_id,
-          reply_markup: { inline_keyboard: ik }
+          message_id: message.message_id
         });
       }
 
-      const response = await copyMessage(true);
-      if (!response.ok) {
-        await copyMessage();
+      return new Response('OK');
+    }
+
+    // Normal message forwarding
+    const sender = fromChat;
+    const senderUid = sender.id.toString();
+    const senderName = sender.username ? `@${sender.username}` : [sender.first_name, sender.last_name].filter(Boolean).join(' ');
+
+    const copyMessage = async function (withUrl = false) {
+      const ik = [[{
+        text: `🔏 From: ${senderName} (${senderUid})`,
+        callback_data: senderUid,
+      }]];
+
+      if (withUrl) {
+        ik[0][0].text = `🔓 From: ${senderName} (${senderUid})`
+        ik[0][0].url = `tg://user?id=${senderUid}`;
       }
+
+      return await postToTelegramApi(botToken, 'copyMessage', {
+        chat_id: parseInt(ownerUid),
+        from_chat_id: fromChat.id,
+        message_id: message.message_id,
+        reply_markup: { inline_keyboard: ik }
+      });
+    }
+
+    const response = await copyMessage(true);
+    if (!response.ok) {
+      await copyMessage();
     }
 
     return new Response('OK');
