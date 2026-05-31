@@ -447,7 +447,7 @@ export async function handleRequest(request, config) {
   }
 
   return new Response('Not Found', { status: 404 });
-              }}
+              }
 
 export async function postToTelegramApi(token, method, body) {
   return fetch(`https://api.telegram.org/bot${token}/${method}`, {
